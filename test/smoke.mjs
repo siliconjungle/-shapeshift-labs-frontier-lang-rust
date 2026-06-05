@@ -15,6 +15,7 @@ const ast = toRustAst(document);
 assert.equal(ast.kind, 'rust.module');
 assert.ok(ast.items.some((item) => item.kind === 'struct' && item.name === 'Todo'));
 assert.ok(ast.items.some((item) => item.kind === 'capabilityDescriptor' && item.name === 'HTTP_REQUEST'));
+assert.equal(ast.items.find((item) => item.kind === 'struct' && item.name === 'Todo').sourceRef.semanticNodeId, 'entity_todo');
 assert.equal(renderRustAst(ast), out);
 assert.match(out, /pub struct TodoInput/);
 assert.match(out, /HTTP_REQUEST_CAPABILITY/);
