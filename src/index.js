@@ -66,9 +66,31 @@ export function toRustAst(document, options = {}) {
 }
 
 export function renderRustAst(ast) {
+  return renderRustAstWithSourceMap(ast).code;
+}
+
+export function renderRustAstWithSourceMap(ast, options = {}) {
   const lines = [];
+  const mappings = [];
+  const target = normalizeTarget(options, 'rust');
   lines.push(`// ${ast.banner}`, '');
-  for (const item of ast.items) {
+  ast.items.forEach((item, index) => {
+    const startLine = lines.length + 1;
+    const startIndex = lines.length;
+    renderRustItem(lines, item);
+    const generatedSpan = declarationBlockSpan(lines, startIndex, startLine, item, target, options.targetPath);
+    if (item.sourceRef?.semanticNodeId && generatedSpan) {
+      mappings.push(sourceMapMapping(item, index, generatedSpan, target, options, 'rust-renderer-declaration-block'));
+    }
+  });
+  const code = `${lines.join('\n').trimEnd()}\n`;
+  return {
+    code,
+    sourceMap: sourceMapEnvelope(ast, mappings, target, options, 'rust', 'rust-renderer-declaration-block')
+  };
+}
+
+function renderRustItem(lines, item) {
     if (item.kind === 'patchEnum') {
       lines.push('#[derive(Clone, Debug, PartialEq)]', `pub enum ${item.name} {`, '    Set { path: String, value: serde_json::Value },', '    Remove { path: String },', '    Insert { path: String, value: serde_json::Value },', '    Merge { path: String, value: serde_json::Value },', '}', '');
     }
@@ -85,12 +107,19 @@ export function renderRustAst(ast) {
       lines.push('}', '');
     }
     if (item.kind === 'function') lines.push(`pub fn ${item.name}(_state: &serde_json::Value, _input: ${item.inputType}) -> ${item.returnType} {`, '    Vec::new()', '}', '');
-  }
-  return `${lines.join('\n').trimEnd()}\n`;
 }
 
 export function emitRust(document, options = {}) {
   return renderRustAst(toRustAst(document, options));
+}
+
+export function emitRustWithSourceMap(document, options = {}) {
+  const ast = toRustAst(document, options);
+  const result = renderRustAstWithSourceMap(ast, {
+    sourceMapId: options.sourceMapId ?? `sourcemap_${idFragment(document.id)}_rust`,
+    ...options
+  });
+  return { ...result, ast };
 }
 
 function structItem(node, fields) {
@@ -100,4 +129,91 @@ function structItem(node, fields) {
     fields: fields.map((field) => ({ name: rustIdentifier(field.name), type: rustType(field.type) })),
     sourceRef: sourceRef(node, { regionIds: fields.map((field) => field.id) })
   };
+}
+
+function declarationBlockSpan(lines, startIndex, startLine, item, target, targetPath) {
+  let endIndex = lines.length - 1;
+  while (endIndex >= startIndex && lines[endIndex] === '') endIndex -= 1;
+  if (endIndex < startIndex) return undefined;
+  return definedObject({
+    path: targetPath,
+    target,
+    targetPath,
+    generatedName: item.name,
+    startLine,
+    startColumn: 1,
+    endLine: endIndex + 1,
+    endColumn: lines[endIndex].length + 1
+  });
+}
+
+function normalizeTarget(options, language) {
+  return definedObject({
+    ...(options.target ?? {}),
+    language: options.target?.language ?? language,
+    emitPath: options.target?.emitPath ?? options.targetPath
+  });
+}
+
+function sourceMapMapping(item, index, generatedSpan, target, options, strategy) {
+  return definedObject({
+    id: `map_${idFragment(item.sourceRef.semanticNodeId)}_${index}`,
+    semanticNodeId: item.sourceRef.semanticNodeId,
+    nativeSourceId: options.nativeSourceId,
+    semanticSymbolId: options.semanticSymbolIdsBySemanticNodeId?.[item.sourceRef.semanticNodeId],
+    semanticOccurrenceId: options.semanticOccurrenceIdsBySemanticNodeId?.[item.sourceRef.semanticNodeId],
+    sourceSpan: options.sourceSpansBySemanticNodeId?.[item.sourceRef.semanticNodeId],
+    generatedSpan,
+    target,
+    generatedName: item.name,
+    evidenceIds: options.evidence?.map((record) => record.id),
+    lossIds: options.lossIdsBySemanticNodeId?.[item.sourceRef.semanticNodeId],
+    precision: 'declaration',
+    metadata: {
+      generatedSpanStrategy: strategy,
+      sourceMapImplication: 'Generated span covers the emitted declaration block and is not token exact.',
+      semanticIndexImplication: 'Mapping is anchored by semanticNodeId; symbol and occurrence ids are optional caller-provided links.',
+      lossAccountingImplication: 'No loss ids are inferred by the printer; caller-provided loss ids are copied when available.',
+      mergeReadinessImplication: 'Suitable for declaration-level overlap review, not fine-grained token merge admission.',
+      semanticNodeKind: item.sourceRef.semanticNodeKind,
+      semanticNodeName: item.sourceRef.semanticNodeName,
+      regionIds: item.sourceRef.regionIds
+    }
+  });
+}
+
+function sourceMapEnvelope(ast, mappings, target, options, language, strategy) {
+  return definedObject({
+    kind: 'frontier.lang.sourceMap',
+    version: 1,
+    id: options.sourceMapId ?? `sourcemap_${idFragment(ast.kind)}_${language}`,
+    sourcePath: options.sourcePath,
+    sourceHash: options.sourceHash,
+    target,
+    targetPath: options.targetPath,
+    targetHash: options.targetHash,
+    semanticIndexId: options.semanticIndexId,
+    universalAstId: options.universalAstId,
+    nativeAstId: options.nativeAstId,
+    nativeSourceId: options.nativeSourceId,
+    mappings,
+    evidence: options.evidence ?? [],
+    metadata: {
+      generatedSpanStrategy: strategy,
+      precision: 'declaration',
+      sourceMapImplication: 'Approximate generated spans are emitted as sidecar mappings without rewriting the printer.',
+      semanticIndexImplication: 'Semantic index linkage remains optional and can be attached through ids supplied in options.',
+      lossAccountingImplication: 'The renderer does not create loss records; existing loss ids can be associated per semantic node.',
+      mergeReadinessImplication: 'Declaration-block mappings can guide generated-output review but should not be treated as token-exact source maps.',
+      ...(options.metadata ?? {})
+    }
+  });
+}
+
+function definedObject(object) {
+  return Object.fromEntries(Object.entries(object).filter(([, value]) => value !== undefined));
+}
+
+function idFragment(value) {
+  return rustIdentifier(String(value ?? 'unknown')).replace(/^_+/, '') || 'unknown';
 }
