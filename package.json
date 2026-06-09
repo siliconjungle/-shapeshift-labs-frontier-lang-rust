@@ -1,6 +1,6 @@
 {
   "name": "@shapeshift-labs/frontier-lang-rust",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Rust projection adapter for Frontier Lang semantic source documents.",
   "type": "module",
   "main": "./dist/index.js",
@@ -53,7 +53,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@shapeshift-labs/frontier-lang-kernel": "0.3.11"
+    "@shapeshift-labs/frontier-lang-kernel": "0.3.12"
   },
   "devDependencies": {
     "typescript": "^5.9.3"
