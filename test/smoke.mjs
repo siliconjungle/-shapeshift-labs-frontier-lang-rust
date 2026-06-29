@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
 import { actionNode, capabilityNode, createDocument, entityNode, typeNode } from '@shapeshift-labs/frontier-lang-kernel';
-import { emitRust, emitRustWithSourceMap, renderRustAst, renderRustAstWithSourceMap, toRustAst } from '../dist/index.js';
+import {
+  createRustSemanticMergeEvidence,
+  emitRust,
+  emitRustWithSourceMap,
+  parseRustSemanticTree,
+  queryRustItemRecords,
+  renderRustAst,
+  renderRustAstWithSourceMap,
+  summarizeRustSemanticTree,
+  toRustAst
+} from '../dist/index.js';
 
 const document = createDocument({ id: 'doc', name: 'Doc', nodes: [
   typeNode({ id: 'type_input', name: 'TodoInput', fields: [{ id: 'title', name: 'title', type: 'Text' }] }),
@@ -57,3 +67,39 @@ assert.match(out, /reqwest::Client::execute/);
 assert.match(out, /pub struct Todo/);
 assert.match(out, /BTreeSet<String>/);
 assert.match(out, /pub fn add_todo/);
+
+const rustSource = [
+  'use std::sync::Arc;',
+  '#[cfg(feature = "simd")]',
+  'pub unsafe fn from_rust(value: usize) -> usize { value }',
+  'pub struct RustThing;',
+  'impl RustThing {',
+  '  pub fn save(&self) {}',
+  '}',
+  'macro_rules! generated { () => {}; }',
+  ''
+].join('\n');
+const tree = parseRustSemanticTree(rustSource, { sourcePath: 'src/lib.rs' });
+const evidence = createRustSemanticMergeEvidence(rustSource, { sourcePath: 'src/lib.rs' });
+const summary = summarizeRustSemanticTree(tree);
+const methods = queryRustItemRecords(tree, { kind: 'method', name: 'save' });
+assert.equal(tree.kind, 'frontier.lang.rustSemanticTree');
+assert.equal(tree.parser.name, 'frontier-rust-source-scanner');
+assert.equal(tree.parser.exactAst, false);
+assert.equal(tree.records.some((record) => record.kind === 'use' && record.name === 'std::sync::Arc'), true);
+assert.equal(tree.records.some((record) => record.kind === 'fn' && record.name === 'from_rust'), true);
+assert.equal(tree.records.some((record) => record.kind === 'struct' && record.name === 'RustThing'), true);
+assert.equal(tree.records.some((record) => record.kind === 'macro' && record.name === 'generated'), true);
+assert.equal(methods.length, 1);
+assert.equal(methods[0].parentKey.startsWith('impl:RustThing.impl'), true);
+assert.equal(methods[0].sourceSpan.path, 'src/lib.rs');
+assert.equal(summary.method, 1);
+assert.equal(summary.proofGaps >= 3, true);
+assert.equal(tree.proofGaps.some((gap) => gap.code === 'rust-cfg-conditional-compilation-boundary'), true);
+assert.equal(tree.proofGaps.some((gap) => gap.code === 'rust-unsafe-boundary'), true);
+assert.equal(tree.proofGaps.some((gap) => gap.code === 'rust-macro-expansion-boundary'), true);
+assert.equal(evidence.kind, 'frontier.lang.rustSemanticMergeEvidence');
+assert.equal(evidence.status, 'needs-review');
+assert.equal(evidence.autoMergeClaim, false);
+assert.equal(evidence.borrowCheckEquivalenceClaim, false);
+assert.equal(evidence.macroExpansionEquivalenceClaim, false);

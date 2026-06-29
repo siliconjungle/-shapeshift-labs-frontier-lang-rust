@@ -1,6 +1,6 @@
 {
   "name": "@shapeshift-labs/frontier-lang-rust",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "description": "Rust projection adapter for Frontier Lang semantic source documents.",
   "type": "module",
   "main": "./dist/index.js",
@@ -43,7 +43,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/siliconjungle/-shapeshift-labs-frontier-lang-rust.git"
+    "url": "git+ssh://git@github.com/siliconjungle/-shapeshift-labs-frontier-lang-rust.git"
   },
   "bugs": {
     "url": "https://github.com/siliconjungle/-shapeshift-labs-frontier-lang-rust/issues"

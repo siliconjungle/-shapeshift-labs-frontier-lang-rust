@@ -217,3 +217,10 @@ function definedObject(object) {
 function idFragment(value) {
   return rustIdentifier(String(value ?? 'unknown')).replace(/^_+/, '') || 'unknown';
 }
+
+export {
+  createRustSemanticMergeEvidence,
+  parseRustSemanticTree,
+  queryRustItemRecords,
+  summarizeRustSemanticTree
+} from './source.js';

@@ -117,3 +117,17 @@ export declare function renderRustAst(ast: RustAstModule): string;
 export declare function renderRustAstWithSourceMap(ast: RustAstModule, options?: EmitRustOptions): RustSourceMapResult;
 export declare function emitRust(document: FrontierLangDocument, options?: EmitRustOptions): string;
 export declare function emitRustWithSourceMap(document: FrontierLangDocument, options?: EmitRustOptions): EmitRustWithSourceMapResult;
+export {
+  createRustSemanticMergeEvidence,
+  parseRustSemanticTree,
+  queryRustItemRecords,
+  summarizeRustSemanticTree
+} from './source.js';
+export type {
+  RustSemanticMergeEvidence,
+  RustSemanticProofGap,
+  RustSemanticRecord,
+  RustSemanticTree,
+  RustSemanticTreeSummary,
+  RustSourceSpan
+} from './source.js';
